@@ -16,7 +16,7 @@ defaultSections = [
 ]
 
 projectRoot = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-defaultOutputDir = '%s/cocos/bindings/auto' % projectRoot
+defaultOutputDir = f'{projectRoot}/cocos/bindings/auto'
 
 def _check_ndk_root_env():
     ''' Checking the environment NDK_ROOT, which will be used for building
@@ -71,7 +71,7 @@ def main():
         print ('    If nothing is specified, all built-in sections will be generated.\n')
         print ('    Built-in section list:')
         for section in defaultSections:
-            print ('        %s' % section)
+            print(f'        {section}')
         sys.exit(0)
 
     cur_platform= '??'
@@ -94,11 +94,23 @@ def main():
 
 
     x86_llvm_path = ""
-    x64_llvm_path = os.path.abspath(os.path.join(ndk_root, 'toolchains/llvm/prebuilt', '%s-%s' % (cur_platform, 'x86_64')))
+    x64_llvm_path = os.path.abspath(
+        os.path.join(
+            ndk_root, 'toolchains/llvm/prebuilt', f'{cur_platform}-x86_64'
+        )
+    )
     if not os.path.exists(x64_llvm_path):
-        x86_llvm_path = os.path.abspath(os.path.join(ndk_root, 'toolchains/llvm/prebuilt', '%s' % (cur_platform)))
+        x86_llvm_path = os.path.abspath(
+            os.path.join(
+                ndk_root, 'toolchains/llvm/prebuilt', f'{cur_platform}'
+            )
+        )
     if not os.path.exists(x86_llvm_path):
-        x86_llvm_path = os.path.abspath(os.path.join(ndk_root, 'toolchains/llvm/prebuilt', '%s-%s' % (cur_platform, 'x86')))
+        x86_llvm_path = os.path.abspath(
+            os.path.join(
+                ndk_root, 'toolchains/llvm/prebuilt', f'{cur_platform}-x86'
+            )
+        )
 
     if os.path.isdir(x64_llvm_path):
         llvm_path = x64_llvm_path
@@ -106,15 +118,33 @@ def main():
         llvm_path = x86_llvm_path
     else:
         print ('llvm toolchain not found!')
-        print ('path: %s or path: %s are not valid! ' % (x86_llvm_path, x64_llvm_path))
+        print(f'path: {x86_llvm_path} or path: {x64_llvm_path} are not valid! ')
         sys.exit(1)
 
     x86_gcc_toolchain_path = ""
-    x64_gcc_toolchain_path = os.path.abspath(os.path.join(ndk_root, 'toolchains/arm-linux-androideabi-4.9/prebuilt', '%s-%s' % (cur_platform, 'x86_64')))
+    x64_gcc_toolchain_path = os.path.abspath(
+        os.path.join(
+            ndk_root,
+            'toolchains/arm-linux-androideabi-4.9/prebuilt',
+            f'{cur_platform}-x86_64',
+        )
+    )
     if not os.path.exists(x64_gcc_toolchain_path):
-        x86_gcc_toolchain_path = os.path.abspath(os.path.join(ndk_root, 'toolchains/arm-linux-androideabi-4.9/prebuilt', '%s' % (cur_platform)))
+        x86_gcc_toolchain_path = os.path.abspath(
+            os.path.join(
+                ndk_root,
+                'toolchains/arm-linux-androideabi-4.9/prebuilt',
+                f'{cur_platform}',
+            )
+        )
     if not os.path.exists(x86_gcc_toolchain_path):
-        x86_gcc_toolchain_path = os.path.abspath(os.path.join(ndk_root, 'toolchains/arm-linux-androideabi-4.9/prebuilt', '%s-%s' % (cur_platform, 'x86')))
+        x86_gcc_toolchain_path = os.path.abspath(
+            os.path.join(
+                ndk_root,
+                'toolchains/arm-linux-androideabi-4.9/prebuilt',
+                f'{cur_platform}-x86',
+            )
+        )
 
     if os.path.isdir(x64_gcc_toolchain_path):
         gcc_toolchain_path = x64_gcc_toolchain_path
@@ -122,7 +152,9 @@ def main():
         gcc_toolchain_path = x86_gcc_toolchain_path
     else:
         print ('gcc toolchain not found!')
-        print ('path: %s or path: %s are not valid! ' % (x64_gcc_toolchain_path, x86_gcc_toolchain_path))
+        print(
+            f'path: {x64_gcc_toolchain_path} or path: {x86_gcc_toolchain_path} are not valid! '
+        )
         sys.exit(1)
 
     cocos_root = os.path.abspath(projectRoot)
@@ -146,32 +178,33 @@ def main():
 
     # set proper environment variables
     if 'linux' in platform or platform == 'darwin':
-        os.putenv('LD_LIBRARY_PATH', '%s/libclang' % cxx_generator_root)
-        print ('%s/libclang' % cxx_generator_root)
+        os.putenv('LD_LIBRARY_PATH', f'{cxx_generator_root}/libclang')
+        print(f'{cxx_generator_root}/libclang')
     if platform == 'win32':
         path_env = os.environ['PATH']
         os.putenv('PATH', r'%s;%s\libclang;%s\tools\win32;' % (path_env, cxx_generator_root, cxx_generator_root))
 
 
     try:
-        tojs_root = '%s/tools/tojs' % projectRoot
+        tojs_root = f'{projectRoot}/tools/tojs'
 
         target = 'spidermonkey'
-        generator_py = '%s/generator.py' % cxx_generator_root
+        generator_py = f'{cxx_generator_root}/generator.py'
         tasks = []
 
-        def generate (cfg, directory = None, section = None, filename = None):
+        def generate(cfg, directory = None, section = None, filename = None):
             if directory is None: directory = os.path.dirname(cfg)
             if section is None: section = os.path.basename(cfg)[:-4]
-            if filename is None: filename = 'jsb_%s_auto' % section
-            print ('!!----------Generating bindings for %s----------!!' % (section))
-            command = '%s -W ignore %s %s -s %s -t %s -o %s -n %s' % (python_bin, generator_py, cfg, section, target, directory, filename)
-            print ("command : %s" % (command))
+            if filename is None:
+                filename = f'jsb_{section}_auto'
+            print(f'!!----------Generating bindings for {section}----------!!')
+            command = f'{python_bin} -W ignore {generator_py} {cfg} -s {section} -t {target} -o {directory} -n {filename}'
+            print(f"command : {command}")
             # tasks.append(_run_cmd(command))
             popen = _run_cmd(command)
             popen.communicate()
             if popen.returncode != 0:
-                print ("Error: failed to generate bindings for '%s'" % (section))
+                print(f"Error: failed to generate bindings for '{section}'")
                 sys.exit(popen.returncode)
 
         if len(sys.argv) > 2 and sys.argv[1] == '--config':
@@ -181,7 +214,7 @@ def main():
             genCnt = 0
             for section in defaultSections:
                 if len(sys.argv) <= 1 or any(section in s for s in sys.argv[1:]):
-                    generate('%s/%s.ini' % (tojs_root, section), defaultOutputDir)
+                    generate(f'{tojs_root}/{section}.ini', defaultOutputDir)
                     genCnt += 1
             if genCnt == 0:
                 print ('----------------------------------------')

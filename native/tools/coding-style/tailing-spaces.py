@@ -25,10 +25,7 @@ def scan(*dirs, **kwargs):
 def fixone(src):
   lines = open(src, 'r').readlines()
 
-  trimed = []
-  for line in lines:
-    trimed.append(re.sub('\s+$', '', line))
-
+  trimed = [re.sub('\s+$', '', line) for line in lines]
   while len(trimed) > 1 and not trimed[-1]:
     trimed.pop()
   trimed.append('')
@@ -39,7 +36,7 @@ def fixone(src):
 
 
 def lint(root):
-  print('Checking tailing whitespaces in: %s' % root)
+  print(f'Checking tailing whitespaces in: {root}')
   dirs = [
     os.path.join(root, 'cocos'),
     os.path.join(root, 'extensions'),

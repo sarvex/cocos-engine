@@ -136,11 +136,7 @@ def find_sub_string_count(s, start, end, substr):
 def split_container_name(name):
     name = name.strip()
     left = name.find('<')
-    right = -1
-
-    if left != -1:
-        right = name.rfind('>')
-
+    right = name.rfind('>') if left != -1 else -1
     if left == -1 or right == -1:
         return [name]
 
@@ -175,27 +171,27 @@ def normalize_type_name_by_sections(sections):
     suffix = ''
 
     index = len(sections) - 1
-    while sections[index] == '*' or sections[index] == '&':
+    while sections[index] in ['*', '&']:
         suffix += sections[index]
         index -= 1
 
     name_for_search = container_name.replace(
         'const ', '').replace('&', '').replace('*', '').strip()
-    if name_for_search in stl_type_map:
-        normalized_name = container_name + '<' + \
-            ', '.join(
-                sections[1:1+stl_type_map[name_for_search]]) + '>' + suffix
-    else:
-        normalized_name = container_name + '<' + ', '.join(sections[1:]) + '>'
-
-    return normalized_name
+    return (
+        f'{container_name}<'
+        + ', '.join(sections[1 : 1 + stl_type_map[name_for_search]])
+        + '>'
+        + suffix
+        if name_for_search in stl_type_map
+        else f'{container_name}<' + ', '.join(sections[1:]) + '>'
+    )
 
 
 def normalize_std_function_by_sections(sections):
     normalized_name = ''
     if sections[0] == 'std_function_args':
         normalized_name = '(' + ', '.join(sections[1:]) + ')'
-    elif sections[0] == 'std::function' or sections[0] == 'function':
+    elif sections[0] in ['std::function', 'function']:
         normalized_name = 'std::function<' + \
             sections[1] + ' ' + sections[2] + '>'
     else:
@@ -212,7 +208,7 @@ def normalize_type_str(s, depth=1):
         ret_pos = s.find('(', start)
         sections.append(s[start:ret_pos].strip())  # return type
         end = s.find(')', ret_pos + 1)
-        sections.append('std_function_args<' + s[ret_pos+1:end].strip() + '>')
+        sections.append(f'std_function_args<{s[ret_pos + 1:end].strip()}>')
     else:
         sections = split_container_name(s)
     section_len = len(sections)
@@ -222,34 +218,32 @@ def normalize_type_str(s, depth=1):
     # for section in sections:
     #     print('>' * depth + section)
 
-    if sections[0] == 'const std::basic_string' or sections[0] == 'const basic_string':
+    if sections[0] in ['const std::basic_string', 'const basic_string']:
         last_section = sections[len(sections) - 1]
         if last_section == '&' or last_section == '*' or last_section.startswith('::'):
-            return 'const std::string' + last_section
+            return f'const std::string{last_section}'
         else:
             return 'const std::string'
 
-    elif sections[0] == 'std::basic_string' or sections[0] == 'basic_string':
+    elif sections[0] in ['std::basic_string', 'basic_string']:
         last_section = sections[len(sections) - 1]
         if last_section == '&' or last_section == '*' or last_section.startswith('::'):
-            return 'std::string' + last_section
+            return f'std::string{last_section}'
         else:
             return 'std::string'
 
     for i in range(1, section_len):
         sections[i] = normalize_type_str(sections[i], depth+1)
 
-    if sections[0] == 'std::function' or sections[0] == 'function' or sections[0] == 'std_function_args':
-        normalized_name = normalize_std_function_by_sections(sections)
-    else:
-        normalized_name = normalize_type_name_by_sections(sections)
-    return normalized_name
+    return (
+        normalize_std_function_by_sections(sections)
+        if sections[0] in ['std::function', 'function', 'std_function_args']
+        else normalize_type_name_by_sections(sections)
+    )
 
 
 def capitalize(name):
-    if len(name) == 0:
-        return name
-    return name[0].upper() + name[1:]
+    return name if len(name) == 0 else name[0].upper() + name[1:]
 
 
 class BaseEnumeration(object):
@@ -295,7 +289,7 @@ class BaseEnumeration(object):
         return cls._kinds[id]
 
     def __repr__(self):
-        return '%s.%s' % (self.__class__, self.name,)
+        return f'{self.__class__}.{self.name}'
 
 ### Availability Kinds ###
 
@@ -310,7 +304,7 @@ class AvailabilityKind(BaseEnumeration):
     _name_map = None
 
     def __repr__(self):
-        return 'AvailabilityKind.%s' % (self.name,)
+        return f'AvailabilityKind.{self.name}'
 
 
 AvailabilityKind.AVAILABLE = AvailabilityKind(0)
@@ -357,11 +351,11 @@ def native_name_from_type(ntype, underlying=False):
         esize = ntype.element_count
         # logger.info("found a const array: " + str(etype.spelling) + "[" + str(esize) + "], treat as std::array<,"+ str(esize)+">")
         # return  "decltype(" + str(etype.spelling) + " _[" + str(esize) + "])"
-        return "std::array<%s, %s>" % (etype.spelling, esize)
+        return f"std::array<{etype.spelling}, {esize}>"
     else:
         name = ntype.get_declaration().spelling
         #print >> sys.stderr, "Unknown type: " + str(kind) + " " + str(name)
-        return INVALID_NATIVE_TYPE + " - " + str(kind) + " ? " + str(name)
+        return f"{INVALID_NATIVE_TYPE} - {str(kind)} ? {str(name)}"
         # pdb.set_trace()
 
 
@@ -370,9 +364,11 @@ def build_namespace(cursor, namespaces=[]):
     build the full namespace for a specific cursor
     '''
     if cursor:
-        parent = cursor.semantic_parent
-        if parent:
-            if parent.kind == cindex.CursorKind.NAMESPACE or parent.kind == cindex.CursorKind.CLASS_DECL:
+        if parent := cursor.semantic_parent:
+            if parent.kind in [
+                cindex.CursorKind.NAMESPACE,
+                cindex.CursorKind.CLASS_DECL,
+            ]:
                 namespaces.append(parent.displayname)
                 build_namespace(parent, namespaces)
 
@@ -384,9 +380,9 @@ def get_namespaced_class_name(declaration_cursor):
     ns_list.reverse()
     ns = "::".join(ns_list)
     display_name = declaration_cursor.displayname.replace("::__ndk1", "")
-    if len(ns) > 0:
+    if ns != "":
         ns = ns.replace("::__ndk1", "")
-        return ns + "::" + display_name
+        return f"{ns}::{display_name}"
     return display_name
 
 
@@ -395,11 +391,11 @@ def generate_namespace_list(cursor, namespaces=[]):
     build the full namespace for a specific cursor
     '''
     if cursor:
-        parent = cursor.semantic_parent
-        if parent:
-            if parent.kind == cindex.CursorKind.NAMESPACE or parent.kind == cindex.CursorKind.CLASS_DECL:
-                if parent.kind == cindex.CursorKind.NAMESPACE:
-                    namespaces.append(parent.displayname)
+        if parent := cursor.semantic_parent:
+            if parent.kind == cindex.CursorKind.NAMESPACE:
+                namespaces.append(parent.displayname)
+                generate_namespace_list(parent, namespaces)
+            elif parent.kind == cindex.CursorKind.CLASS_DECL:
                 generate_namespace_list(parent, namespaces)
     return namespaces
 
@@ -409,9 +405,9 @@ def get_namespace_name(declaration_cursor):
     ns_list.reverse()
     ns = "::".join(ns_list)
 
-    if len(ns) > 0:
+    if ns != "":
         ns = ns.replace("::__ndk1", "")
-        return ns + "::"
+        return f"{ns}::"
 
     return declaration_cursor.displayname
 
@@ -470,7 +466,7 @@ class NativeType(object):
         if ntype.kind == cindex.TypeKind.POINTER:
             nt = NativeType.from_type(ntype.get_pointee(), generator)
 
-            if None != nt.canonical_type:
+            if nt.canonical_type != None:
                 nt.canonical_type.name += "*"
                 nt.canonical_type.namespaced_class_name += "*"
                 nt.canonical_type.whole_name += "*"
@@ -482,29 +478,29 @@ class NativeType(object):
             nt.is_const = ntype.get_pointee().is_const_qualified()
             nt.is_pointer = True
             if nt.is_const:
-                nt.whole_name = "const " + nt.whole_name
+                nt.whole_name = f"const {nt.whole_name}"
         elif ntype.kind == cindex.TypeKind.LVALUEREFERENCE:
             nt = NativeType.from_type(ntype.get_pointee(), generator)
             nt.is_const = ntype.get_pointee().is_const_qualified()
-            nt.whole_name = nt.namespaced_class_name + "&"
+            nt.whole_name = f"{nt.namespaced_class_name}&"
             nt.is_reference = True
 
             if nt.is_const:
-                nt.whole_name = "const " + nt.whole_name
+                nt.whole_name = f"const {nt.whole_name}"
 
-            if None != nt.canonical_type:
+            if nt.canonical_type != None:
                 nt.canonical_type.whole_name += "&"
         elif ntype.kind == cindex.TypeKind.RVALUEREFERENCE:
             nt = NativeType.from_type(ntype.get_pointee(), generator)
             nt.is_const = ntype.get_pointee().is_const_qualified()
-            nt.whole_name = nt.namespaced_class_name + "&&"
+            nt.whole_name = f"{nt.namespaced_class_name}&&"
             nt.is_reference = True
             nt.is_rreference = True
 
             if nt.is_const:
-                nt.whole_name = "const " + nt.whole_name
+                nt.whole_name = f"const {nt.whole_name}"
 
-            if None != nt.canonical_type:
+            if nt.canonical_type != None:
                 nt.canonical_type.whole_name += "&&"
         else:
             nt = NativeType(generator)
@@ -514,9 +510,9 @@ class NativeType(object):
                 decl).replace('::__ndk1', '')
             nt.is_struct = decl.kind == cindex.CursorKind.STRUCT_DECL
             if decl.kind == cindex.CursorKind.CLASS_DECL \
-                    and not nt.namespaced_class_name.startswith('std::function') \
-                    and not nt.namespaced_class_name.startswith('std::string') \
-                    and not nt.namespaced_class_name.startswith('std::basic_string'):
+                        and not nt.namespaced_class_name.startswith('std::function') \
+                        and not nt.namespaced_class_name.startswith('std::string') \
+                        and not nt.namespaced_class_name.startswith('std::basic_string'):
                 nt.is_object = True
                 displayname = decl.displayname.replace('::__ndk1', '')
                 nt.name = normalize_type_str(displayname)
@@ -544,23 +540,30 @@ class NativeType(object):
                 nt.whole_name = nt.namespaced_class_name
                 nt.is_const = ntype.is_const_qualified()
                 if nt.is_const:
-                    nt.whole_name = "const " + nt.whole_name
+                    nt.whole_name = f"const {nt.whole_name}"
 
                 # Check whether it's a std::function typedef
                 cdecl = ntype.get_canonical().get_declaration()
-                if None != cdecl.spelling and cdecl.spelling == "function":
+                if cdecl.spelling != None and cdecl.spelling == "function":
                     nt.name = "std::function"
 
-                if nt.name != INVALID_NATIVE_TYPE and nt.name != "std::string" and nt.name != "std::function":
-                    if ntype.kind == cindex.TypeKind.UNEXPOSED or ntype.kind == cindex.TypeKind.TYPEDEF or ntype.kind == cindex.TypeKind.ELABORATED:
-                        ret = NativeType.from_type(
-                            ntype.get_canonical(), generator)
-                        if ret.name != "":
-                            if decl.kind == cindex.CursorKind.TYPEDEF_DECL:
-                                ret.canonical_type = nt
-                                if nt.name == 'va_list':
-                                    ret.not_supported = True
-                            return ret
+                if nt.name not in [
+                    INVALID_NATIVE_TYPE,
+                    "std::string",
+                    "std::function",
+                ] and ntype.kind in [
+                    cindex.TypeKind.UNEXPOSED,
+                    cindex.TypeKind.TYPEDEF,
+                    cindex.TypeKind.ELABORATED,
+                ]:
+                    ret = NativeType.from_type(
+                        ntype.get_canonical(), generator)
+                    if ret.name != "":
+                        if decl.kind == cindex.CursorKind.TYPEDEF_DECL:
+                            ret.canonical_type = nt
+                            if nt.name == 'va_list':
+                                ret.not_supported = True
+                        return ret
 
                 nt.is_enum = ntype.get_canonical().kind == cindex.TypeKind.ENUM
                 if nt.is_enum:
@@ -623,12 +626,10 @@ class NativeType(object):
             for (k, v) in dict.items():
                 if k.startswith('@'):
                     k = k[1:]
-                    match = re.match("^" + k + "$", real_key)
-                    if match:
+                    if match := re.match(f"^{k}$", real_key):
                         return True
-                else:
-                    if k == real_key:
-                        return True
+                elif k == real_key:
+                    return True
         return False
 
     @staticmethod
@@ -637,12 +638,10 @@ class NativeType(object):
             for (k, v) in dict.items():
                 if k.startswith('@'):
                     k = k[1:]
-                    match = re.match("^" + k + "$", real_key)
-                    if match:
+                    if match := re.match(f"^{k}$", real_key):
                         return v
-                else:
-                    if k == real_key:
-                        return v
+                elif k == real_key:
+                    return v
         return None
 
     @staticmethod
@@ -651,23 +650,18 @@ class NativeType(object):
             for (k, v) in dict.items():
                 if k.startswith('@'):
                     k = k[1:]
-                    match = re.match('.*' + k, real_key)
-                    if match:
+                    if match := re.match(f'.*{k}', real_key):
                         return re.sub(k, v, real_key)
-                else:
-                    if k == real_key:
-                        return v
+                elif k == real_key:
+                    return v
         return None
 
     def from_native(self, convert_opts):
         assert('generator' in convert_opts)
         generator = convert_opts['generator']
         keys = []
-        # print("from_native:" + str(convert_opts))
-        context = "nullptr"
-        if "context" in convert_opts:
-            context = convert_opts["context"]
-        return "ok &= nativevalue_to_se(%s, %s, %s /*ctx*/)" % (convert_opts["in_value"], convert_opts["out_value"], context)
+        context = convert_opts["context"] if "context" in convert_opts else "nullptr"
+        return f'ok &= nativevalue_to_se({convert_opts["in_value"]}, {convert_opts["out_value"]}, {context} /*ctx*/)'
 
     def to_native(self, convert_opts):
         assert('generator' in convert_opts)
@@ -679,14 +673,8 @@ class NativeType(object):
             indent = convert_opts['level'] * four_space
             return str(tpl).replace("\n", "\n" + indent)
 
-        context = "nullptr"
-        if "context" in convert_opts:
-            context = convert_opts["context"]
-
-        if self.is_rreference:
-            return "ok &= sevalue_to_native(%s, &%s, %s)" % (convert_opts["in_value"], convert_opts["out_value"], context)
-        else:
-            return "ok &= sevalue_to_native(%s, &%s, %s)" % (convert_opts["in_value"], convert_opts["out_value"], context)
+        context = convert_opts["context"] if "context" in convert_opts else "nullptr"
+        return f'ok &= sevalue_to_native({convert_opts["in_value"]}, &{convert_opts["out_value"]}, {context})'
 
     def to_string(self, generator, omit_const=False):
         conversions = generator.config['conversions']
@@ -700,30 +688,41 @@ class NativeType(object):
 
         to_native_dict = generator.config['conversions']['to_native']
         from_native_dict = generator.config['conversions']['from_native']
-        use_typedef = False
+        typedef_name = (
+            self.canonical_type.name if self.canonical_type != None else None
+        )
 
-        typedef_name = self.canonical_type.name if None != self.canonical_type else None
-
-        if None != typedef_name:
-            if NativeType.dict_has_key_re(to_native_dict, [typedef_name]) or NativeType.dict_has_key_re(from_native_dict, [typedef_name]):
-                use_typedef = True
-
+        use_typedef = bool(
+            typedef_name != None
+            and (
+                NativeType.dict_has_key_re(to_native_dict, [typedef_name])
+                or NativeType.dict_has_key_re(from_native_dict, [typedef_name])
+            )
+        )
         if use_typedef and self.canonical_type:
             name = self.canonical_type.namespaced_class_name
-        return "const " + name if (self.is_pointer and self.is_const and not omit_const) else name
+        return (
+            f"const {name}"
+            if (self.is_pointer and self.is_const and not omit_const)
+            else name
+        )
 
     def get_whole_name(self, generator):
         conversions = generator.config['conversions']
         to_native_dict = conversions['to_native']
         from_native_dict = conversions['from_native']
-        use_typedef = False
         name = self.whole_name
-        typedef_name = self.canonical_type.name if None != self.canonical_type else None
+        typedef_name = (
+            self.canonical_type.name if self.canonical_type != None else None
+        )
 
-        if None != typedef_name:
-            if NativeType.dict_has_key_re(to_native_dict, [typedef_name]) or NativeType.dict_has_key_re(from_native_dict, [typedef_name]):
-                use_typedef = True
-
+        use_typedef = bool(
+            typedef_name != None
+            and (
+                NativeType.dict_has_key_re(to_native_dict, [typedef_name])
+                or NativeType.dict_has_key_re(from_native_dict, [typedef_name])
+            )
+        )
         if use_typedef and self.canonical_type:
             name = self.canonical_type.whole_name
 
@@ -768,7 +767,11 @@ class NativeType(object):
         return False
 
     def __str__(self):
-        return self.canonical_type.whole_name if None != self.canonical_type else self.whole_name
+        return (
+            self.canonical_type.whole_name
+            if self.canonical_type != None
+            else self.whole_name
+        )
 
 
 class NativeField(object):
@@ -787,10 +790,7 @@ class NativeField(object):
         match = member_field_re.match(self.name)
         self.signature_name = self.name
         self.ntype = NativeType.from_type(cursor.type, generator)
-        if match:
-            self.pretty_name = match.group(1)
-        else:
-            self.pretty_name = self.name
+        self.pretty_name = match[1] if match else self.name
 
     def toJSON(self):
         return {
@@ -806,8 +806,9 @@ class NativeField(object):
     def can_parse(ntype, generator, cursor):
         native_type = NativeType.from_type(ntype, generator)
         if ntype.kind == cindex.TypeKind.UNEXPOSED and ntype.get_declaration().type.kind == cindex.TypeKind.UNEXPOSED and native_type.name != "std::string":
-            logger.error(' %s is ntype.kind %s or %s' %
-                         (native_type.name, ntype.kind, ntype.get_declaration().type.kind))
+            logger.error(
+                f' {native_type.name} is ntype.kind {ntype.kind} or {ntype.get_declaration().type.kind}'
+            )
             return False
         return True
 
